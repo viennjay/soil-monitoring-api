@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arduino Data Viewer</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.2.3/css/bootstrap.min.css">
+    <style>
+        body {
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .viewer-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+        }
+        .input-section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .data-section {
+            background: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        .status-indicator {
+            padding: 8px 15px;
+            border-radius: 15px;
+            font-weight: bold;
+            color: white;
+            display: inline-block;
+            margin: 10px 0;
+        }
+        .status-success { background-color: #28a745; }
+        .status-error { background-color: #dc3545; }
+        .status-info { background-color: #17a2b8; }
+        .raw-data {
+            background: #f1f3f4;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 0.9em;
+            max-height: 200px;
+            overflow-y: auto;
+            word-break: break-all;
+        }
+        .table-container {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .metadata-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .btn-gradient {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+        }
+        .btn-gradient:hover {
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="viewer-container">
+        <div class="header">
+            <h1><i class="fas fa-eye"></i> Arduino Data Viewer</h1>
+            <p class="text-muted">Decrypt and view your uploaded sensor data</p>
+        </div>
+
+        <div class="input-section">
+            <h5>Retrieve Your Data</h5>
+            <div class="row">
+                <div class="col-md-6">
+                    <label for="binId" class="form-label">Bin ID:</label>
+                    <input type="text" id="binId" class="form-control" 
+                           placeholder="e.g., 65f1a2b3c4d5e6f7g8h9">
+                </div>
+                <div class="col-md-4">
+                    <label for="password" class="form-label">Encryption Password:</label>
+                    <input type="password" id="password" class="form-control" 
+                           placeholder="Your encryption password">
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button id="fetchBtn" class="btn btn-gradient w-100">
+                        <i class="fas fa-download"></i> Fetch Data
+                    </button>
+                </div>
+            </div>
+            <div class="mt-3">
+                <label for="apiKey" class="form-label">Your JSONBin.io Master Key:</label>
+                <input type="password" id="apiKey" class="form-control" 
+                       placeholder="$2a$10$your.master.key.here">
+            </div>
+        </div>
+
+        <div id="statusDiv"></div>
+
+        <div id="dataDisplay" style="display: none;">
+            <!-- Metadata Section -->
+            <div class="metadata-box" id="metadataSection">
+                <h5><i class="fas fa-info-circle"></i> Data Information</h5>
+                <div id="metadataContent"></div>
+            </div>
+
+            <!-- Raw Data Section -->
+            <div class="data-section">
+                <h5>Raw Encrypted Data (First 500 chars)</h5>
+                <div class="raw-data" id="rawData"></div>
+            </div>
+
+            <!-- Decrypted Data Section -->
+            <div class="data-section" id="decryptedSection" style="display: none;">
+                <h5><i class="fas fa-unlock"></i> Decrypted Sensor Data</h5>
+                
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <strong>Device:</strong> <span id="deviceName"></span><br>
+                        <strong>Upload Time:</strong> <span id="uploadTime"></span><br>
+                        <strong>Total Records:</strong> <span id="recordCount"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Thresholds:</strong><br>
+                        <small>
+                            Dry: Raw > <span id="dryThreshold"></span><br>
+                            Medium: Raw <span id="mediumRange"></span><br>
+                            Wet: Raw < <span id="wetThreshold"></span>
+                        </small>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Moisture (%)</th>
+                                <th>Raw Value</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dataTableBody">
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mt-3">
+                    <button id="downloadBtn" class="btn btn-success">
+                        <i class="fas fa-download"></i> Download as JSON
+                    </button>
+                    <button id="printBtn" class="btn btn-info">
+                        <i class="fas fa-print"></i> Print Report
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script>
+        let currentData = null;
+        
+        document.getElementById('fetchBtn').addEventListener('click', fetchData);
+        document.getElementById('downloadBtn').addEventListener('click', downloadData);
+        document.getElementById('printBtn').addEventListener('click', printReport);
+
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('statusDiv');
+            statusDiv.innerHTML = `<div class="status-indicator status-${type}">${message}</div>`;
+        }
+
+        async function fetchData() {
+            const binId = document.getElementById('binId').value.trim();
+            const password = document.getElementById('password').value.trim();
+            const apiKey = document.getElementById('apiKey').value.trim();
+
+            if (!binId || !password || !apiKey) {
+                showStatus('Please fill in all fields', 'error');
+                return;
+            }
+
+            showStatus('Fetching data from JSONBin.io...', 'info');
+
+            try {
+                // Fetch from JSONBin.io
+                const response = await fetch(`https://api.jsonbin.io/v3/b/${binId}`, {
+                    method: 'GET',
+                    headers: {
+                        'X-Master-Key': apiKey
+                    }
+                });
+
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        throw new Error('Bin not found. Check your Bin ID.');
+                    } else if (response.status === 401) {
+                        throw new Error('Invalid API key. Check your Master Key.');
+                    } else {
+                        throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
+                    }
+                }
+
+                const result = await response.json();
+                const binData = result.record;
+
+                // Show raw data
+                document.getElementById('rawData').textContent = 
+                    JSON.stringify(binData).substring(0, 500) + '...';
+                
+                // Show metadata
+                const metadata = binData.metadata || {};
+                document.getElementById('metadataContent').innerHTML = `
+                    <strong>Device Type:</strong> ${metadata.deviceType || 'Unknown'}<br>
+                    <strong>Upload Time:</strong> ${new Date(metadata.uploadTime).toLocaleString()}<br>
+                    <strong>Record Count:</strong> ${metadata.recordCount || 'Unknown'}<br>
+                    <strong>Encrypted:</strong> ${metadata.encrypted ? 'Yes' : 'No'}
+                `;
+
+                document.getElementById('dataDisplay').style.display = 'block';
+
+                // Try to decrypt
+                if (binData.encryptedData) {
+                    showStatus('Decrypting data...', 'info');
+                    await decryptData(binData.encryptedData, password);
+                } else {
+                    showStatus('No encrypted data found in this bin', 'error');
+                }
+
+            } catch (error) {
+                console.error('Fetch error:', error);
+                showStatus('Error: ' + error.message, 'error');
+            }
+        }
+
+        async function decryptData(encryptedData, password) {
+            try {
+                // Decrypt the data
+                const decryptedBytes = CryptoJS.AES.decrypt(encryptedData, password);
+                const decryptedText = decryptedBytes.toString(CryptoJS.enc.Utf8);
+
+                if (!decryptedText) {
+                    throw new Error('Wrong password or corrupted data');
+                }
+
+                const decryptedData = JSON.parse(decryptedText);
+                currentData = decryptedData;
+
+                // Verify data integrity if hash exists
+                if (decryptedData.dataHash) {
+                    const calculatedHash = CryptoJS.SHA256(JSON.stringify(decryptedData.data)).toString();
+                    if (calculatedHash !== decryptedData.dataHash) {
+                        showStatus('⚠️ Data integrity check failed - data may be corrupted', 'error');
+                    } else {
+                        showStatus('✅ Data decrypted and verified successfully!', 'success');
+                    }
+                } else {
+                    showStatus('✅ Data decrypted successfully!', 'success');
+                }
+
+                // Display the decrypted data
+                displayDecryptedData(decryptedData);
+
+            } catch (error) {
+                console.error('Decryption error:', error);
+                if (error.message.includes('Wrong password')) {
+                    showStatus('❌ Wrong password - cannot decrypt data', 'error');
+                } else {
+                    showStatus('❌ Decryption failed: ' + error.message, 'error');
+                }
+            }
+        }
+
+        function displayDecryptedData(data) {
+            const deviceInfo = data.deviceInfo || {};
+            const thresholds = data.thresholds || {};
+            const sensorData = data.data || [];
+
+            // Fill device info
+            document.getElementById('deviceName').textContent = deviceInfo.deviceName || 'Unknown';
+            document.getElementById('uploadTime').textContent = 
+                new Date(deviceInfo.uploadTime).toLocaleString();
+            document.getElementById('recordCount').textContent = deviceInfo.recordCount || sensorData.length;
+
+            // Fill thresholds
+            document.getElementById('dryThreshold').textContent = thresholds.DRY || 'N/A';
+            document.getElementById('mediumRange').textContent = 
+                `${thresholds.MEDIUM_LOW || 'N/A'}-${thresholds.MEDIUM_HIGH || 'N/A'}`;
+            document.getElementById('wetThreshold').textContent = thresholds.WET || 'N/A';
+
+            // Fill data table
+            const tableBody = document.getElementById('dataTableBody');
+            tableBody.innerHTML = '';
+
+            sensorData.forEach(record => {
+                const row = document.createElement('tr');
+                
+                let statusClass = '';
+                switch(record.status) {
+                    case 'Dry': statusClass = 'text-danger fw-bold'; break;
+                    case 'Medium': statusClass = 'text-warning fw-bold'; break;
+                    case 'Wet': statusClass = 'text-success fw-bold'; break;
+                }
+
+                row.innerHTML = `
+                    <td>${new Date(record.timestamp).toLocaleString()}</td>
+                    <td>${record.moisture}%</td>
+                    <td>${record.moistureRaw}</td>
+                    <td class="${statusClass}">${record.status}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+
+            document.getElementById('decryptedSection').style.display = 'block';
+        }
+
+        function downloadData() {
+            if (!currentData) return;
+
+            const blob = new Blob([JSON.stringify(currentData, null, 2)], { 
+                type: 'application/json' 
+            });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `arduino-data-${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            
+            URL.revokeObjectURL(url);
+            showStatus('Data downloaded successfully!', 'success');
+        }
+
+        function printReport() {
+            if (!currentData) return;
+
+            const deviceInfo = currentData.deviceInfo || {};
+            const sensorData = currentData.data || [];
+
+            const printContent = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Arduino Sensor Data Report</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 40px; }
+                        .header { text-align: center; margin-bottom: 30px; }
+                        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 20px 0; }
+                        .info-box { padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+                        .table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                        .table th, .table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                        .table th { background-color: #f8f9fa; }
+                        @media print { .no-print { display: none; } }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <h1>Arduino Sensor Data Report</h1>
+                        <p>Generated: ${new Date().toLocaleString()}</p>
+                    </div>
+                    
+                    <div class="info-grid">
+                        <div class="info-box">
+                            <h4>Device Information</h4>
+                            <p><strong>Device:</strong> ${deviceInfo.deviceName}</p>
+                            <p><strong>Upload Time:</strong> ${new Date(deviceInfo.uploadTime).toLocaleString()}</p>
+                            <p><strong>Records:</strong> ${deviceInfo.recordCount}</p>
+                        </div>
+                    </div>
+                    
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Moisture (%)</th>
+                                <th>Raw Value</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${sensorData.map(record => `
+                                <tr>
+                                    <td>${new Date(record.timestamp).toLocaleString()}</td>
+                                    <td>${record.moisture}%</td>
+                                    <td>${record.moistureRaw}</td>
+                                    <td>${record.status}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                    
+                    <div class="no-print" style="margin-top: 20px; text-align: center;">
+                        <button onclick="window.print()">Print</button>
+                        <button onclick="window.close()">Close</button>
+                    </div>
+                </body>
+                </html>
+            `;
+
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(printContent);
+            printWindow.document.close();
+            setTimeout(() => printWindow.print(), 500);
+        }
+    </script>
+</body>
+</html>
