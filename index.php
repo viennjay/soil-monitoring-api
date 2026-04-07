@@ -541,7 +541,7 @@ async function connectToESP8266() {
     
     try {
         // Test connection by fetching data
-        const response = await fetch(`http://${esp8266Ip}/data`, {
+        const response = await fetch(`https://soil-monitoring-api.onrender.com/api/data`, {
             method: 'GET',
             mode: 'cors'
         });
