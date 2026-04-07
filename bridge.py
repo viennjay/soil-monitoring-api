@@ -3,7 +3,7 @@ import requests
 import json
 import time
 
-CLOUD_API_URL = "http://127.0.0.1:5000/update_data" 
+CLOUD_API_URL = "https://soil-monitoring-api.onrender.com/update_data"
 
 SERIAL_PORT = 'COM3' 
 
